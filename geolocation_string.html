@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Map&amp;Geolocation</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+        
+        #map {
+            height: 500px;
+            width: 500px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- MapArea -->
+    <div id="map"></div>
+    <input type="color" value="#ff0000" id="clr">
+    <input type="text" value="" id="opp">
+    <input type="button" value="search" id="go">
+    <!-- /MapArea -->
+
+    <!-- jQuery&GoogleMapsAPI -->
+    <script src="https://code.jquery.com/jquery-2.1.4.min.js"></script>
+    <script src="https://cdn.mlkcca.com/v2.0.0/milkcocoa.js"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA4KQeDI9Hb3wfJeoE5v29xT2CtdTVfAFc&callback=initMap" async defer></script>
+    <!-- /jQuery&GoogleMapsAPI -->
+
+    <!-- javascript -->
+    <script>
+        //GoogleMapsAPIのURLパラメータにコールバック関数としてinitMap()を実行
+        //Main:位置情報を取得する処理 //getCurrentPosition :or: watchPosition
+        function initMap() {
+            navigator.geolocation.getCurrentPosition(mapsInit, mapsError, set);
+        }
+
+        //1．位置情報の取得に成功した時の処理
+        function mapsInit(position) {
+            //lat=緯度、lon=経度 を取得
+            var lat = position.coords.latitude;
+            var lon = position.coords.longitude;
+            var acc = position.coords.accuracy;
+            var milkcocoa = new MilkCocoa('uniio2a993q.mlkcca.com');
+            var ds = milkcocoa.dataStore("user");
+            var playerid = "";
+            var map;
+            var player;
+            var others = {};
+            map = new google.maps.Map(document.getElementById('map'), {
+                center: {
+                    lat: lat,
+                    lng: lon
+                }, //緯度,経度を設定
+                zoom: 15, //Zoom値設定
+                disableDefaultUI: true,
+                draggable: false,
+                scrollwheel: false,
+                zoomControl: false,
+                disableDoubleClickZoom: true,
+                keyboardShortcuts: true,
+            });
+            map.objects = [];
+            (function () {
+                var lat1 = lat;
+                var lng1 = lon;
+                var options = {
+                    strokeColor: '#ff0000',
+                    strokeOpacity: 0.35,
+                    strokeWeight: 2,
+                    fillColor: '#FF0000',
+                    fillOpacity: 0.35,
+                    //                    map:map,
+                    center: {
+                        lat: lat1,
+                        lng: lng1
+                    },
+                    radius: 100,
+                };
+                player = new google.maps.Circle(options);
+                player.options = options;
+                ds.push(player.options, function (err, datum) {
+                    playerid = datum.id;
+                    player.setMap(map);
+                });
+            }());
+            map.addListener("center_changed", function () {
+                player.setCenter(map.getCenter());
+            });
+            //            google.maps.event.addDomListener(document.getElementById("clr"), "change", function () {
+            //                player.options.fillColor = this;
+            //            });
+            function userstep() {
+                player.options.center = {
+                    lat: player.center.lat(),
+                    lng: player.center.lng()
+                };
+                player.options.fillColor = $('#clr').val();
+                ds.set(playerid, player.options);
+            };
+            setInterval(userstep, 3000);
+            setInterval(function () {
+                for (var key in others) {
+                    others[key].setMap(null);
+                }
+            }, 10000);
+
+            //            function step() {
+            //                map.objects.forEach(function (e) {
+            //                    var cenOpp = e.getPosition();
+            //                    var cenMe = map.getCenter();
+            //                    if (Math.abs(cenOpp.lat() - cenMe.lat()) > 0.001 || Math.abs(cenOpp.lng() - cenMe.lng()) > 0.001) {
+            //                        e.infowindow.close();
+            //                        return;
+            //                    }
+            //
+            //                    (function () {
+            //                        console.log(e.infowindow.content);
+            //                        e.infowindow.open(map,e);
+            //                    }());
+            //                });
+            //            }
+            //            var markerMake = function(){
+            //                var marker = new google.maps.Marker({
+            //                    position: {
+            //                        lat: lat + 0.01*Math.random(),
+            //                        lng: lon + 0.01*Math.random()
+            //                    },
+            //                    map: map,
+            //                });
+            //                marker.infowindow = new google.maps.InfoWindow({
+            //                    content:'<div>hello</div>',
+            //                });
+            //                marker.openSession = function(){
+            //                };
+            //                return marker;
+            //            };
+            //            var myObjects={};
+            //            function stepuser(){
+            //                console.log(playerid);
+            //                ds.set(playerid,player.center);
+            //            };
+            //            ds.on("push",function(data){
+            //other pushed function == other setted function
+            //            });
+            ds.on("set", function (data) {
+                if (data.id === playerid) {
+                    player.setMap(null);
+                    player = new google.maps.Circle(data.value);
+                    player.options = data.value;
+                    player.setMap(map);
+                } else {
+                    if (!others[data.id]) {
+                        var other = new google.maps.Circle(data.value);
+                        other.setMap(map);
+                        others[data.id] = other;
+                    } else {
+                        others[data.id].setMap(null);
+                        others[data.id] = new google.maps.Circle(data.value);
+                        others[data.id].setMap(map);
+                    }
+                }
+            });
+            //////////route search//////////////////
+            var direcitonservice = new google.maps.DirectionsService();
+            //            var renderer = new google.maps.DirectionsRenderer({
+            //                markerOptions: {
+            //                    visible: false
+            //                }
+            //            });
+
+            function makeDir(key) {
+                var dest = {};
+                var playcent = map.getCenter();
+                ds.get(key, function (err, data) {
+                    dest = data.value.center;
+                    var request = {
+                        origin: playcent,
+                        destination: {
+                            lat: dest.lat,
+                            lng: dest.lng
+                        },
+                        travelMode: google.maps.TravelMode.DRIVING,
+                    };
+                    //                    renderer.setMap(map);
+                    direcitonservice.route(request, function (results, status) {
+                        if (status === google.maps.DirectionsStatus.OK) {
+                            //                            renderer.setDirections(result);
+                            //                            map.setOptions({
+                            //                                zoom: 15,
+                            //                            });
+                            // dont use renderer
+                            var poly = new google.maps.Polyline({
+                                map: map, //マップ
+                                path: results.routes[0].overview_path, //ポリラインの座標の列
+                                strokeWeight: 5, //ストローク幅(ピクセル単位)
+                                strokeColor: "#f01010", //16進数形式のストロークの色
+                                strokeOpacity: 0.5 //ストロークの不透明度(0.0～1.0)
+                            });
+                        }
+                    });
+                });
+            };
+            $("#go").on("click", function () {
+                var key = $("#opp").val();
+                makeDir(key);
+            });
+            ///////////////////////
+
+        };
+
+        //2． 位置情報の取得に失敗した場合の処理
+        function mapsError(error) {
+            var e = "";
+            if (error.code == 1) { //1＝位置情報取得が許可されてない（ブラウザの設定）
+                e = "位置情報が許可されてません";
+            }
+            if (error.code == 2) { //2＝現在地を特定できない
+                e = "現在位置を特定できません";
+            }
+            if (error.code == 3) { //3＝位置情報を取得する前にタイムアウトになった場合
+                e = "位置情報を取得する前にタイムアウトになりました";
+            }
+            alert("エラー：" + e);
+        };
+
+        //3.位置情報取得オプション
+        var set = {
+            enableHighAccuracy: true, //より高精度な位置を求める
+            maximumAge: 20000, //最後の現在地情報取得が20秒以内であればその情報を再利用する設定
+            timeout: 10000, //10秒以内に現在地情報を取得できなければ、処理を終了
+        };
+    </script>
+</body>
+
+</html>
